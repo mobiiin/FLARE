@@ -401,12 +401,15 @@ class FireFuelEncoder(nn.Module):
 		raw_fuel_channels: Sequence[int] | None = None,
 		engineered_channel_keywords: Sequence[str] | None = None,
 		channel_names: Mapping[int, str] | None = None,
+		terrain_channels: int = 0,
 	) -> None:
 		super().__init__()
 		self.input_channels = int(input_channels)
 		raw = _as_int_list(raw_fuel_channels, [84, 85])
 		engineered = select_channels_by_keywords(channel_names, _as_str_list(engineered_channel_keywords), input_channels=self.input_channels)
+		self.terrain_channels = int(terrain_channels)
 		self.indices = _dedupe_indices(raw + [index for index in engineered if index not in raw], input_channels=self.input_channels)
+		self.indices += list(range(self.input_channels, self.input_channels + self.terrain_channels))
 		if len(self.indices) < len(raw):
 			raise ValueError(f"FireFuelEncoder requires raw fuel channels {raw}, but input_channels={self.input_channels}.")
 		if engineered_channel_keywords and channel_names is None:
@@ -1400,22 +1403,33 @@ class PhysicalStateAuxHead(nn.Module):
 
 class CAWFELatte(nn.Module):
 	"""Single configurable CAWFE-Latte architecture with named config ablations."""
-	def __init__(self, *, input_channels: int = 129, input_sequence_length: int = 5, output_channels: int = 4, output_dim: int = 64, version: str = "v1_end_to_end", atmosphere: Mapping[str, Any] | None = None, wind: Mapping[str, Any] | None = None, fire_fuel: Mapping[str, Any] | None = None, flux_energy: Mapping[str, Any] | None = None, fusion: Mapping[str, Any] | None = None, alignment: Mapping[str, Any] | None = None, backbone: Mapping[str, Any] | None = None, temporal_aggregation: Mapping[str, Any] | None = None, post_fusion_backbone: Mapping[str, Any] | None = None, temporal_pooling: Mapping[str, Any] | None = None, regression: Mapping[str, Any] | None = None, support_gate: Mapping[str, Any] | None = None, ablation: Mapping[str, Any] | None = None, decoder: Mapping[str, Any] | None = None, heads: Mapping[str, Any] | None = None, auxiliary: Mapping[str, Any] | None = None, patch_fire_head: Mapping[str, Any] | None = None, domain_adversarial: Mapping[str, Any] | None = None, fire_mmd: Mapping[str, Any] | None = None, mask_guided_regression: Mapping[str, Any] | None = None, regression_moe: Mapping[str, Any] | None = None, supervised_contrastive: Mapping[str, Any] | None = None, physical_state_aux: Mapping[str, Any] | None = None, use_terrain_conditioning: bool = False, terrain_encoder: Mapping[str, Any] | None = None, terrain_film: Mapping[str, Any] | None = None, channel_names: Mapping[int, str] | None = None, debug_prediction_head: bool = False) -> None:
+	def __init__(self, *, input_channels: int = 129, input_sequence_length: int = 5, output_channels: int = 4, output_dim: int = 64, version: str = "v1_end_to_end", atmosphere: Mapping[str, Any] | None = None, wind: Mapping[str, Any] | None = None, fire_fuel: Mapping[str, Any] | None = None, flux_energy: Mapping[str, Any] | None = None, fusion: Mapping[str, Any] | None = None, alignment: Mapping[str, Any] | None = None, backbone: Mapping[str, Any] | None = None, temporal_aggregation: Mapping[str, Any] | None = None, post_fusion_backbone: Mapping[str, Any] | None = None, temporal_pooling: Mapping[str, Any] | None = None, regression: Mapping[str, Any] | None = None, support_gate: Mapping[str, Any] | None = None, ablation: Mapping[str, Any] | None = None, decoder: Mapping[str, Any] | None = None, heads: Mapping[str, Any] | None = None, auxiliary: Mapping[str, Any] | None = None, patch_fire_head: Mapping[str, Any] | None = None, domain_adversarial: Mapping[str, Any] | None = None, fire_mmd: Mapping[str, Any] | None = None, mask_guided_regression: Mapping[str, Any] | None = None, regression_moe: Mapping[str, Any] | None = None, supervised_contrastive: Mapping[str, Any] | None = None, physical_state_aux: Mapping[str, Any] | None = None, use_terrain_conditioning: bool = False, terrain_encoder: Mapping[str, Any] | None = None, terrain_film: Mapping[str, Any] | None = None, terrain_integration: Mapping[str, Any] | None = None, channel_names: Mapping[int, str] | None = None, debug_prediction_head: bool = False) -> None:
 		super().__init__()
 		self.input_channels=int(input_channels); self.input_sequence_length=int(input_sequence_length); self.output_channels=int(output_channels); self.output_dim=int(output_dim); self.version=str(version); self.debug_prediction_head=bool(debug_prediction_head)
 		self.ablation_name=str(dict(ablation or {}).get("name", "baseline"))
 		if self.output_channels != 4: raise ValueError(f"CAWFE-Latte expects output_channels=4, got {self.output_channels}.")
 		if self.input_channels < 86: raise ValueError(f"CAWFE-Latte requires at least 86 input channels, got {self.input_channels}.")
 		atmosphere_config=dict(atmosphere or {}); wind_config=dict(wind or {}); fire_config=dict(fire_fuel or {}); flux_config=dict(flux_energy or {}); fusion_config=dict(fusion or {}); alignment_config=dict(alignment or {}); decoder_config=dict(decoder or {}); head_config=dict(heads or {}); auxiliary_config=dict(auxiliary or {}); patch_fire_config=dict(patch_fire_head or {}); domain_config=dict(domain_adversarial or {}); mmd_config=dict(fire_mmd or {}); mask_guidance_config=dict(mask_guided_regression or {}); moe_config=dict(regression_moe or {}); contrastive_config=dict(supervised_contrastive or {}); physical_config=dict(physical_state_aux or {}); terrain_film_config=dict(terrain_film or {})
-		self.use_terrain_conditioning=bool(use_terrain_conditioning)
-		self.terrain_film_enabled=self.use_terrain_conditioning and bool(terrain_film_config.get("enabled", True))
-		if self.terrain_film_enabled:
-			terrain_encoder_config=dict(terrain_encoder or {})
-			self.terrain_encoder=TerrainEncoder(**terrain_encoder_config); self.terrain_film=TerrainFiLMConditioner(dim=int(terrain_film_config.get("dim", self.output_dim)), **{k:v for k,v in terrain_film_config.items() if k not in {"dim", "enabled"}})
-		else: self.terrain_encoder=None; self.terrain_film=None
+		legacy_terrain = bool(use_terrain_conditioning) and bool(terrain_film_config.get("enabled", True))
+		self.terrain_mode = str(dict(terrain_integration or {}).get("mode", "postfusion_film" if legacy_terrain else "none")).lower()
+		if self.terrain_mode not in {"none", "early_concat", "prefusion_film", "terrain_query", "late_concat", "postfusion_film"}:
+			raise ValueError(f"Unsupported terrain integration mode: {self.terrain_mode!r}")
+		self.use_terrain_conditioning = self.terrain_mode != "none"
+		self.terrain_film_enabled = self.terrain_mode == "postfusion_film"
+		terrain_encoder_config = dict(terrain_encoder or {})
+		self.terrain_encoder = TerrainEncoder(**terrain_encoder_config) if self.terrain_mode in {"prefusion_film", "terrain_query", "late_concat", "postfusion_film"} else None
+		self.terrain_film = TerrainFiLMConditioner(dim=int(terrain_film_config.get("dim", self.output_dim)), **{k:v for k,v in terrain_film_config.items() if k not in {"dim", "enabled"}}) if self.terrain_mode in {"prefusion_film", "postfusion_film"} else None
+		self.terrain_query_projection = nn.Conv2d(self.output_dim, self.output_dim, 1) if self.terrain_mode == "terrain_query" else None
+		self.terrain_late_projection = nn.Conv2d(2 * self.output_dim, self.output_dim, 1) if self.terrain_mode == "late_concat" else None
+		if self.terrain_query_projection is not None:
+			nn.init.zeros_(self.terrain_query_projection.weight); nn.init.zeros_(self.terrain_query_projection.bias)
+		if self.terrain_late_projection is not None:
+			nn.init.zeros_(self.terrain_late_projection.weight); nn.init.zeros_(self.terrain_late_projection.bias)
+			with torch.no_grad():
+				for channel in range(self.output_dim): self.terrain_late_projection.weight[channel, channel, 0, 0] = 1.0
 		self.atmosphere_encoder=AtmosphereEncoder(out_dim=int(atmosphere_config.get("out_dim", self.output_dim)), **{k:v for k,v in atmosphere_config.items() if k != "out_dim"})
 		self.wind_encoder=WindEncoder(input_channels=self.input_channels, out_dim=int(wind_config.get("out_dim", self.output_dim)), channel_names=channel_names, **{k:v for k,v in wind_config.items() if k != "out_dim"})
-		self.fire_fuel_encoder=FireFuelEncoder(input_channels=self.input_channels, out_dim=int(fire_config.get("out_dim", self.output_dim)), channel_names=channel_names, **{k:v for k,v in fire_config.items() if k != "out_dim"})
+		self.fire_fuel_encoder=FireFuelEncoder(input_channels=self.input_channels, out_dim=int(fire_config.get("out_dim", self.output_dim)), channel_names=channel_names, terrain_channels=4 if self.terrain_mode == "early_concat" else 0, **{k:v for k,v in fire_config.items() if k != "out_dim"})
 		self.flux_energy_encoder=FluxEnergyEncoder(input_channels=self.input_channels, out_dim=int(flux_config.get("out_dim", self.output_dim)), channel_names=channel_names, **{k:v for k,v in flux_config.items() if k != "out_dim"})
 		if not bool(alignment_config.get("enabled", True)): raise ValueError("CAWFE-Latte multimodal alignment is mandatory before fusion.")
 		spatial=dict(alignment_config.get("spatial", {})); distribution=dict(alignment_config.get("distribution", {})); temporal=dict(alignment_config.get("temporal", {}))
@@ -1485,16 +1499,32 @@ class CAWFELatte(nn.Module):
 		if int(x.shape[2]) < 86: raise ValueError(f"CAWFE-Latte requires at least 86 input channels, got {int(x.shape[2])}.")
 		if int(x.shape[2])<self.input_channels: raise ValueError(f"CAWFE-Latte was configured for input_channels={self.input_channels}, got {int(x.shape[2])}.")
 	def forward(self,x:torch.Tensor,terrain:torch.Tensor|None=None,*,return_features:bool=False,return_attention:bool=False,return_aux:bool=False):
-		self._validate_input(x); atmosphere=self.atmosphere_encoder(x); wind=self.wind_encoder(x); fire_fuel=self.fire_fuel_encoder(x); flux_energy=self.flux_energy_encoder(x); aligned=self.alignment(atmosphere,wind,fire_fuel,flux_energy)
+		self._validate_input(x)
+		if self.use_terrain_conditioning:
+			if terrain is None or terrain.ndim != 4 or terrain.shape[0] != x.shape[0] or terrain.shape[1] != 4 or terrain.shape[-2:] != x.shape[-2:]:
+				raise ValueError(f"Terrain mode {self.terrain_mode} requires terrain B x 4 x H x W matching input.")
+		terrain_embedding = self.terrain_encoder(terrain) if self.terrain_encoder is not None else None
+		atmosphere=self.atmosphere_encoder(x); wind=self.wind_encoder(x)
+		if self.terrain_mode == "early_concat":
+			fire_input = torch.cat((x, terrain[:, None].expand(-1, x.shape[1], -1, -1, -1)), dim=2)
+		else: fire_input = x
+		fire_fuel=self.fire_fuel_encoder(fire_input); flux_energy=self.flux_energy_encoder(x)
+		if self.terrain_mode == "prefusion_film": fire_fuel=self.terrain_film(fire_fuel, terrain_embedding)
+		aligned=self.alignment(atmosphere,wind,fire_fuel,flux_energy)
+		if self.terrain_mode == "terrain_query":
+			query_terrain = self.terrain_query_projection(terrain_embedding)
+			aligned["fire_fuel"] = aligned["fire_fuel"] + self.alignment.to_tokens(query_terrain[:, None])
 		attention=None
 		if self.fusion_type in {"fire_query_attention", "fire_query"}:
 			fusion_result=self.fusion(aligned["atmosphere"],aligned["wind"],aligned["fire_fuel"],aligned["flux_energy"],return_attention=return_attention); fused_tokens,attention=fusion_result if return_attention else (fusion_result,None); z_dynamic=tokens_to_grid(fused_tokens,aligned["spatial_shape"])
 		else:
 			aligned_grids=[tokens_to_grid(aligned[name],aligned["spatial_shape"]) for name in ("atmosphere","wind","fire_fuel","flux_energy")]; z_dynamic=self.fusion(*aligned_grids); fused_tokens=self.alignment.to_tokens(z_dynamic)
-		z_terrain=z_dynamic; terrain_embedding=None
+		z_terrain=z_dynamic
 		if self.terrain_film_enabled:
-			if terrain is None: raise ValueError("CAWFE-Latte terrain conditioning is enabled but terrain input is missing.")
-			terrain_embedding=self.terrain_encoder(terrain); z_terrain=self.terrain_film(z_dynamic,terrain_embedding)
+			z_terrain=self.terrain_film(z_dynamic,terrain_embedding)
+		elif self.terrain_mode == "late_concat":
+			terrain_time = terrain_embedding[:, None].expand(-1, z_dynamic.shape[1], -1, -1, -1)
+			z_terrain = _apply_per_timestep(torch.cat((z_dynamic, terrain_time), dim=2), self.terrain_late_projection)
 		z_backbone=self.post_fusion_backbone(z_terrain); z_shared=self.temporal_pooling(z_backbone)
 		router_weights=None; mask_guidance_attention=None
 		if self.decoder_type == "shared":

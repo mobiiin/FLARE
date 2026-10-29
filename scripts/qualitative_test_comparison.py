@@ -23,7 +23,7 @@ from scripts.plot_qualitative_test_comparison import (
 )
 from src.config import load_config
 from src.evaluation.fire_activity import FIRE_MASK_THRESHOLD
-from src.evaluation.qualitative_test_figure import draw_comparison, gt_descriptors
+from src.evaluation.qualitative_test_figure import draw_error_comparison_png, gt_descriptors
 
 MODEL_SEED = 42
 SPLITS = ('test', 'val', 'train')
@@ -131,6 +131,8 @@ def main(argv=None):
 
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding='utf-8'))
     config['layout']['num_cases'] = 1
+    config['wind']['normalize_direction'] = True
+    config['wind']['scale'] = 0.5
     dataset_config = load_config(ROOT / 'artifacts/table2_baselines/persistence/resolved_config.yaml')
     config['_dataset_config'] = dataset_config
     config['_wind_levels'] = dataset_config.get('atmospheric_features', {}).get('low_level_indices', [0, 1, 2])
@@ -172,10 +174,10 @@ def main(argv=None):
 
     outputs = []
     for number, ((split, fire, seed, record), case, data) in enumerate(zip(selections, cases, case_data), start=1):
-        filename = f'{safe_name(fire)}_t{int(record["current_index"]):06d}_seed_{seed}'
+        filename = f'{safe_name(fire)}_t{int(record["current_index"]):06d}_seed_{seed}_abs_error_full_fuel'
         output_dir = OUTPUT_DIR / split / safe_name(fire)
-        draw_comparison([case], [data], output_dir, config, formats=('png',), filename=filename)
         output = output_dir / f'{filename}.png'
+        draw_error_comparison_png(case, data, output, config)
         outputs.append(output)
         print(f'FIGURE {number}/{len(selections)}: {output}', flush=True)
     return outputs

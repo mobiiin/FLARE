@@ -239,6 +239,7 @@ def build_model_from_config(config: Mapping[str, Any], input_channels: int):
 			use_terrain_conditioning=bool(section.get("use_terrain_conditioning", False)),
 			terrain_encoder=section.get("terrain_encoder", {}),
 			terrain_film=section.get("terrain_film", {}),
+			terrain_integration=model_config.get("terrain_integration"),
 			channel_names=_load_channel_names(config),
 			debug_prediction_head=bool(section.get("debug_prediction_head", False)),
 		)

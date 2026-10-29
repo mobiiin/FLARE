@@ -482,9 +482,17 @@ def evaluate_full_validation(
                     per_fire[fire_name] = FullValidationAccumulator()
                 per_fire[fire_name].update(prediction[indices], y[indices])
             if save_analysis_data:
-                sample_rows.extend(
-                    _sample_metric_rows(prediction, y, metadata_items, model_name=model_name, seed=seed)
-                )
+                new_rows = _sample_metric_rows(prediction, y, metadata_items, model_name=model_name, seed=seed)
+                if config.get("model", {}).get("terrain_integration") is not None:
+                    if terrain_raw is None or terrain_raw.shape[1] != 4:
+                        raise RuntimeError("Terrain ablation requires four terrain channels in full validation.")
+                    for row, patch_terrain in zip(new_rows, terrain_raw):
+                        # Dataset channels: relative elevation, slope magnitude, slope_x, slope_y.
+                        elevation = patch_terrain[0].float()
+                        slope = patch_terrain[1].float()
+                        row.update(mean_elevation=float(elevation.mean()), elevation_std=float(elevation.std(unbiased=False)),
+                                   mean_slope=float(slope.mean()), slope_std=float(slope.std(unbiased=False)))
+                sample_rows.extend(new_rows)
             if logger is not None and (batch_index == 1 or batch_index % 100 == 0 or batch_index == len(val_loader)):
                 logger.info("Full validation progress: %s/%s batches", batch_index, len(val_loader))
 

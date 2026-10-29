@@ -1,0 +1,55 @@
+figure:
+  width: 7.16
+  height: 8.8
+  dpi: 600
+  background: "#ffffff"
+  panel_background: "#fafafa"
+fonts:
+  family: serif
+  base_size: 8
+  title_size: 9
+  row_size: 8.3
+  legend_size: 7.5
+  note_size: 6.8
+lines:
+  current:
+    color: "#777777"
+    linestyle: "--"
+    linewidth: 1.2
+  gt:
+    color: "#111111"
+    linestyle: "-"
+    linewidth: 1.5
+  prediction_baseline:
+    color: "#D55E00"
+    linestyle: "-"
+    linewidth: 1.4
+  prediction_final:
+    color: "#D55E00"
+    linestyle: "-"
+    linewidth: 1.4
+wind:
+  enabled: true
+  stride: 8
+  normalize_direction: true
+  scale: 0.5
+  width: 0.003
+  color: "#446273"
+  alpha: 0.55
+terrain:
+  enabled: true
+  levels: 6
+  alpha: 0.20
+  contour_alpha: 0.20
+  contour_linewidth: 0.35
+  cmap: Greys
+selection:
+  seed: 42
+  shortlist_per_fire: 40
+  minimum_current_pixels: 12
+  minimum_future_pixels: 24
+  maximum_future_fraction: 0.45
+  minimum_centroid_displacement_pixels: 0.5
+  minimum_boundary_margin_pixels: 3
+  minimum_dominant_component_fraction: 0.8
+  top_choice_count: 3

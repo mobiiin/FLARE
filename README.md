@@ -19,6 +19,18 @@ python scripts/qualitative_test_comparison.py CHIMNEYTOPS2 10
 
 The arguments are a fire name or `test`, `val`, `train`, or `all`, followed by the number of PNGs per fire. The command picks different random timestamps and writes PNGs under `artifacts/qualitative_test_comparison/<split>/<fire>/`. See [the qualitative figure guide](research/qualitative_test_comparison.md) for details.
 
+For the held-out-test paper figure showing current, ground-truth future, and predicted future **burn-footprint boundaries** for FLARE baseline and FLARE final, see [the boundary figure guide](research/fire_front_displacement.md). It uses a GT-only frozen case selection and the Table 2 checkpoints.
+
+## FLARE failure-case PNGs
+
+Generate ten figures from objectively ranked RIM and Thomas held-out test failures with one command:
+
+```bash
+python scripts/failure_cases.py 10
+```
+
+The number is the **total** PNG count. The default selection covers composite, Dice, HRR Log MAE, and Active Canopy MAE failures in both fires. It includes the worst distinct case for each fire and criterion, then samples additional cases from each top-50 pool with a fixed selection seed. Only PNGs are written to a run-specific folder under `artifacts/failure_cases/png_gallery/`. Optional flags include `--fire rim`, `--fire thomas`, `--criterion hrr`, `--top-k 50`, `--selection-seed 42`, and `--model-seed 42`.
+
 ## Conda Environment Setup
 Create and activate the environment before running any scripts:
 

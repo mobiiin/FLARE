@@ -107,12 +107,23 @@ def observed_context(root, record, config, predictor=None):
         raise ValueError(f'Invalid configured low-level U/V channels for {path}')
     u = np.mean(np.stack([frame[z*width, y0:y0+h, x0:x0+w] for z in levels]), axis=0).astype(np.float32)
     v = np.mean(np.stack([frame[z*width+1, y0:y0+h, x0:x0+w] for z in levels]), axis=0).astype(np.float32)
+    surface_channel = int(config['multitask']['surface_fuel_channel'])
+    if not 0 <= surface_channel < frame.shape[0]:
+        raise ValueError(f'Configured surface-fuel channel {surface_channel} is invalid for {path}')
+    surface_fuel_full = np.asarray(frame[surface_channel], dtype=np.float32)
+    surface_fuel = np.asarray(surface_fuel_full[y0:y0+h, x0:x0+w], dtype=np.float32)
+    if (surface_fuel.shape != (h, w) or not np.isfinite(surface_fuel_full).all()
+            or not np.isfinite(surface_fuel).all()):
+        raise ValueError(f'Invalid full-fire surface-fuel frame or patch in {path}')
     terrain_path = root / 'fires' / record['fire_name'] / 'terrain/terrain_features.npy'
     elevation = None
     if terrain_path.is_file():
         terrain = np.load(terrain_path, allow_pickle=False)
         elevation = np.asarray(terrain[0, y0:y0+h, x0:x0+w], dtype=np.float32)
     return {'latest_observed_fire_state': observed_mask,
+            'surface_fuel': surface_fuel, 'surface_fuel_full': surface_fuel_full,
+            'surface_fuel_patch_bounds': {'y0': y0, 'x0': x0, 'height': h, 'width': w},
+            'surface_fuel_channel': surface_channel,
             'wind_u': u, 'wind_v': v, 'terrain_elevation': elevation}
 
 
@@ -241,6 +252,28 @@ def color_limits(target, percentile, show_negative=False):
     return limits
 
 
+
+def absolute_error_maps(target, predictions, model_keys, channel):
+    """Return un-clipped |prediction - GT| for one continuous target channel."""
+    if channel not in (0, 1, 3):
+        raise ValueError('Absolute-error maps apply only to surface, canopy, and energy log.')
+    truth = np.asarray(target[channel], dtype=np.float32)
+    result = {}
+    for key in model_keys:
+        predicted = np.asarray(predictions[key][channel], dtype=np.float32)
+        if predicted.shape != truth.shape or not np.isfinite(predicted).all():
+            raise ValueError(f'Invalid {key} prediction for channel {channel}')
+        result[key] = np.abs(predicted - truth)
+    return result
+
+
+def absolute_error_limit(errors, percentile):
+    """One robust color limit shared by all models in a channel row."""
+    values = np.concatenate([np.ravel(array) for array in errors.values()])
+    positive = values[values > 0]
+    return max(float(np.percentile(positive, percentile)), 1e-6) if positive.size else 1e-6
+
+
 def _style(config):
     import matplotlib
     matplotlib.use('Agg', force=True)
@@ -283,7 +316,12 @@ def _draw_context(ax, context, config):
             raise ValueError('wind.stride must be positive')
         u, v = context['wind_u'], context['wind_v']
         yy, xx = np.mgrid[stride//2:u.shape[0]:stride, stride//2:u.shape[1]:stride]
-        ax.quiver(xx, yy, u[yy, xx], v[yy, xx], color='#d5731a', angles='xy', scale_units='xy',
+        u_plot, v_plot = u[yy, xx].copy(), v[yy, xx].copy()
+        if wind.get('normalize_direction', False):
+            speed = np.hypot(u_plot, v_plot)
+            u_plot = np.divide(u_plot, speed, out=np.zeros_like(u_plot), where=speed > 1e-6)
+            v_plot = np.divide(v_plot, speed, out=np.zeros_like(v_plot), where=speed > 1e-6)
+        ax.quiver(xx, yy, u_plot, v_plot, color='#d5731a', angles='xy', scale_units='xy',
                   scale=float(wind['scale']), width=float(wind['width']), pivot='middle', zorder=5)
     ax.set_title('Observed $t$', pad=2)
 
@@ -419,3 +457,103 @@ def draw_comparison(cases, case_data, output_dir, config, *, annotate_metrics=Fa
         fig.savefig(output_dir / f'{filename}.{extension}', dpi=int(config['figure']['dpi']))
     plt.close(fig)
     return saved_limits
+
+
+def draw_error_comparison_png(case, data, output, config):
+    """One-sample PNG: GT fields beside absolute model errors, plus observed fuel."""
+    plt = _style(config)
+    if config['layout']['mode'] != 'compact':
+        raise ValueError('The per-fire absolute-error figure requires the compact layout.')
+    target, context, predictions = data['target'], data['context'], data['predictions']
+    model_keys = ('convlstm', 'baseline', 'final')
+    display_names = ('GT', 'ConvLSTM', 'FLARE baseline', 'FLARE final')
+    limits = color_limits(target, float(config['continuous']['color_percentile']))
+    width = float(config['figure']['width'])
+    height = float(config['layout']['case_height']) + .18
+    fig = plt.figure(figsize=(width, height))
+    block = fig.add_gridspec(5, 7, left=.075, right=.91, top=.985, bottom=.025,
+        height_ratios=[.25, 1, 1, 1, 1],
+        width_ratios=[float(config['layout']['context_width_ratio']), 1, .075, 1, 1, 1, .095],
+        hspace=float(config['layout']['hspace']), wspace=float(config['layout']['wspace']))
+
+    title_ax = fig.add_subplot(block[0, :]); title_ax.axis('off')
+    split_name = {'train': 'training', 'val': 'validation', 'test': 'test'}[case['split']]
+    title_ax.text(0, .5, f"Selected {split_name} sample · {_short_fire_name(case['fire_name'])}",
+                  ha='left', va='center', fontsize=config['fonts']['title_size'], fontweight='semibold')
+
+    context_ax = fig.add_subplot(block[1, 0])
+    _draw_context(context_ax, context, config)
+    note_ax = fig.add_subplot(block[2, 0]); note_ax.axis('off')
+    note_ax.text(.03, .96, f"Observed $t$={case['latest_input_timestamp']}\nFuture $t$={case['target_timestamp']}\n"
+        f"GT active {case['target_active_fraction']:.1%}\nWind: lowest {len(config['_wind_levels'])} levels\n"
+        f"Rows 2–4: |pred − GT|\nOrange box = patch",
+        transform=note_ax.transAxes, va='top', ha='left', fontsize=config['fonts']['tick_size'], color='#444444')
+    fuel = np.asarray(context['surface_fuel_full'], dtype=np.float32)
+    patch = context['surface_fuel_patch_bounds']
+    y0, x0, patch_h, patch_w = (int(patch[key]) for key in ('y0', 'x0', 'height', 'width'))
+    if (fuel.ndim != 2 or not np.isfinite(fuel).all() or fuel.shape[0] < y0+patch_h
+            or fuel.shape[1] < x0+patch_w or min(y0, x0) < 0
+            or (patch_h, patch_w) != target[0].shape):
+        raise ValueError(f'Full-fire surface fuel or evaluated patch is invalid for {case["sample_id"]}')
+    positive_fuel = fuel[fuel > 0]
+    fuel_vmax = max(float(np.percentile(positive_fuel, 99)), 1e-6) if positive_fuel.size else 1.0
+    fuel_ax = fig.add_subplot(block[3:5, 0])
+    _image_axis(fuel_ax, fuel, cmap=config['surface_fuel']['cmap'], vmin=0, vmax=fuel_vmax)
+    from matplotlib.patches import Rectangle
+    fuel_ax.add_patch(Rectangle((x0-.5, y0-.5), patch_w, patch_h, fill=False,
+                                edgecolor='white', linewidth=2.2, zorder=6))
+    fuel_ax.add_patch(Rectangle((x0-.5, y0-.5), patch_w, patch_h, fill=False,
+                                edgecolor='#D55E00', linewidth=1.2, zorder=7))
+    fuel_ax.set_title('Full surface fuel', fontsize=config['fonts']['label_size'], pad=3)
+    fuel_position = fuel_ax.get_position()
+    fuel_ax.set_position([fuel_position.x0 - float(config['surface_fuel']['left_shift']),
+                          fuel_position.y0, fuel_position.width, fuel_position.height])
+
+    gt_mask = target[2] > FIRE_MASK_THRESHOLD
+    row_specs = (('mask', 2, 'Active fire'), ('surface', 0, 'Surface fuel'),
+                 ('canopy', 1, 'Canopy fuel'), ('energy_log', 3, 'HRR'))
+    for row_index, (quantity, channel, row_label) in enumerate(row_specs, start=1):
+        gt_vmin, gt_vmax = limits[quantity]
+        gt_cmap = config['mask']['cmap'] if quantity == 'mask' else config['continuous']['cmaps'][quantity]
+        gt_ax = fig.add_subplot(block[row_index, 1])
+        gt_im = _image_axis(gt_ax, target[channel], cmap=gt_cmap, vmin=gt_vmin, vmax=gt_vmax)
+        gt_ax.set_ylabel(row_label, labelpad=3)
+        if row_index == 1:
+            gt_ax.set_title(display_names[0], pad=2)
+
+        if quantity == 'mask':
+            model_images = {key: 1/(1+np.exp(-np.clip(predictions[key][2], -60, 60))) for key in model_keys}
+            model_cmap, model_vmax = gt_cmap, 1.0
+        else:
+            model_images = absolute_error_maps(target, predictions, model_keys, channel)
+            model_cmap = config['absolute_error']['cmap']
+            model_vmax = absolute_error_limit(model_images, float(config['absolute_error']['color_percentile']))
+            gt_cax = fig.add_subplot(block[row_index, 2])
+            gt_bar = fig.colorbar(gt_im, cax=gt_cax)
+            gt_bar.ax.tick_params(labelsize=config['fonts']['colorbar_size'], length=2, pad=1)
+            if quantity == 'energy_log':
+                gt_bar.ax.set_ylabel('log(1+MW)', fontsize=config['fonts']['colorbar_size'], labelpad=2)
+
+        for column, key in enumerate(model_keys, start=3):
+            values = model_images[key]
+            ax = fig.add_subplot(block[row_index, column])
+            model_im = _image_axis(ax, values, cmap=model_cmap, vmin=0, vmax=model_vmax)
+            if row_index == 1:
+                ax.set_title(display_names[column-2], pad=2)
+            if quantity == 'mask' and config['mask']['show_gt_perimeter'] and gt_mask.any() and not gt_mask.all():
+                ax.contour(gt_mask.astype(float), levels=[.5], colors='white',
+                           linewidths=float(config['mask']['perimeter_linewidth']))
+            if quantity == 'mask' and config['mask']['show_threshold_contour']:
+                if np.any(values < .5) and np.any(values > .5):
+                    ax.contour(values, levels=[.5], colors='#44e1d5', linewidths=.5)
+        model_cax = fig.add_subplot(block[row_index, 6])
+        exceeds = quantity != 'mask' and any(np.any(values > model_vmax) for values in model_images.values())
+        model_bar = fig.colorbar(model_im, cax=model_cax, extend='max' if exceeds else 'neither')
+        model_bar.ax.tick_params(labelsize=config['fonts']['colorbar_size'], length=2, pad=1)
+        if quantity != 'mask':
+            unit = '|Δ log(1+MW)|' if quantity == 'energy_log' else '|Pred − GT|'
+            model_bar.ax.set_ylabel(unit, fontsize=config['fonts']['colorbar_size'], labelpad=2)
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=int(config['figure']['dpi']))
+    plt.close(fig)

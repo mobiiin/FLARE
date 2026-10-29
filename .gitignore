@@ -15,7 +15,7 @@ outputs/
 configs/artifacts/
 fuel_layout_diagnostics/
 results/
-
+figures/
 # Raw simulation outputs and large derived files
 KINGNSM04ASC.*
 *.flux.*

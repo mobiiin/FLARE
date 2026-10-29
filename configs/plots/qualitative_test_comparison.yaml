@@ -55,3 +55,10 @@ terrain:
 colorbars:
   orientation: vertical
   compact: true
+
+surface_fuel:
+  cmap: YlGn
+  left_shift: 0.012
+absolute_error:
+  cmap: Reds
+  color_percentile: 99

@@ -1,0 +1,25 @@
+base_config: ../final_training/cawfe_latte_GA_Q2_full.yaml
+
+experiment:
+  name: flare_terrain_early_concat
+  description: GA_Q2 terrain integration screening; validation only.
+
+model:
+  terrain_integration:
+    mode: early_concat
+
+dataloader:
+  return_terrain: true
+  include_test_split: false
+
+evaluation:
+  split: val
+
+training:
+  epochs: 10
+  max_epochs: 10
+  run_test_after_training: false
+  run_external_test_after_training: false
+  output:
+    root_dir: artifacts/terrain_integration_ablation/TERRAIN_EARLY_CONCAT/seed_42
+    flat_run_layout: true
