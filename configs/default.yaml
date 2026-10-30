@@ -6,7 +6,7 @@
 # Options: a non-empty list of relative or absolute directory paths containing one .npy file per timestamp.
 
 paths:
-  project_root: /home/mhabibp/fire_forecasting
+  project_root: /home/mhabibp/FLARE
   raw_data_root: /project/fafghah/iswinlab/CAWFE_MOBIN/New_CAWFE
   scratch_root: /scratch/mhabibp
   dataset_root: ${paths.scratch_root}/fire_forecasting_datasets/

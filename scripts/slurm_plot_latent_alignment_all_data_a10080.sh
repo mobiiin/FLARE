@@ -9,13 +9,13 @@
 #SBATCH --gpus=a100:1
 #SBATCH --constraint=gpu_a100_80gb
 #SBATCH --time=24:00:00
-#SBATCH --chdir=/home/mhabibp/fire_forecasting
+#SBATCH --chdir=/home/mhabibp/FLARE
 #SBATCH --output=artifacts/logs/slurm/flare_latent_all_%j.out
 #SBATCH --error=artifacts/logs/slurm/flare_latent_all_%j.err
 
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-/home/mhabibp/fire_forecasting}"
+REPO_ROOT="${REPO_ROOT:-/home/mhabibp/FLARE}"
 CONDA_ENV="${CONDA_ENV:-fire_forecasting}"
 MODEL_SEED="${MODEL_SEED:-42}"
 BATCH_SIZE="${BATCH_SIZE:-64}"

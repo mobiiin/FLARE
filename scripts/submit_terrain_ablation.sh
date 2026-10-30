@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     *) usage >&2; exit 2 ;;
   esac
 done
-cd /home/mhabibp/fire_forecasting
+cd /home/mhabibp/FLARE
 for variant in "${VARIANTS[@]}"; do
   for seed in "${SEEDS[@]}"; do
     python scripts/run_terrain_ablation.py "$variant" "$seed" --check-only

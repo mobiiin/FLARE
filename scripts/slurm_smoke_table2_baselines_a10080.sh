@@ -9,13 +9,13 @@
 #SBATCH --gpus=a100:1
 #SBATCH --constraint=gpu_a100_80gb
 #SBATCH --time=00:30:00
-#SBATCH --chdir=/home/mhabibp/fire_forecasting
+#SBATCH --chdir=/home/mhabibp/FLARE
 #SBATCH --output=artifacts/logs/slurm/table2_smoke_%j.out
 #SBATCH --error=artifacts/logs/slurm/table2_smoke_%j.err
 
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-/home/mhabibp/fire_forecasting}"
+REPO_ROOT="${REPO_ROOT:-/home/mhabibp/FLARE}"
 CONDA_ENV="${CONDA_ENV:-fire_forecasting}"
 BASELINES=("$@")
 if [[ ${#BASELINES[@]} -eq 0 ]]; then

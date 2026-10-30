@@ -9,7 +9,7 @@
 #SBATCH --gpus=a100:1
 #SBATCH --constraint=gpu_a100_80gb
 #SBATCH --time=4:00:00
-#SBATCH --chdir=/home/mhabibp/fire_forecasting
+#SBATCH --chdir=/home/mhabibp/FLARE
 #SBATCH --output=artifacts/logs/slurm/cawfe_latte_ablation_%j.out
 #SBATCH --error=artifacts/logs/slurm/cawfe_latte_ablation_%j.err
 
@@ -21,7 +21,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 ABLATION="$1"
-REPO_ROOT="${REPO_ROOT:-/home/mhabibp/fire_forecasting}"
+REPO_ROOT="${REPO_ROOT:-/home/mhabibp/FLARE}"
 CONDA_ENV="${CONDA_ENV:-fire_forecasting}"
 RUN_ID="${RUN_ID:-slurm${SLURM_JOB_ID:-local}}"
 

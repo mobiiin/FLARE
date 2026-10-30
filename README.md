@@ -1111,6 +1111,14 @@ bash scripts/run_data_preparation_pipeline.sh configs/default.yaml --pattern spa
 
 The runner builds engineered frames, estimates train-only fire-mask thresholds, constructs targets using the frozen derived config, builds patch and temporal indices, computes train-only normalization, inspects the dataset, and optionally saves visualizations. It never trains models by default. Logs are written under `artifacts/logs/data_preparation/`; after success, the script prints the exact next training commands.
 
+To rebuild the deleted scratch dataset in one CPU Slurm job from `/home/mhabibp/FLARE`, run:
+
+```bash
+sbatch scripts/slurm_rebuild_processed_dataset.sh
+```
+
+The job restores `/scratch/mhabibp/cawfe_datasets/cawfe_engineered_v1`, uses the same percentile and memory-cache settings as the previous successful data-preparation job, builds all three temporal indices, computes the `sparse5_h10` training normalization, inspects the output, and refreshes the fixed screening-validation subset. Check `artifacts/logs/slurm/flare_data_prep_<jobid>.out` and `artifacts/logs/data_preparation/*/status.json` for completion.
+
 ## Terrain Processing and FLARE Conditioning
 
 When `terrain.enabled: true`, the engineered-frame builder finds each fire's `.terrain` file, validates its dimensions against the processed frames, and saves it under `fires/<FIRE_NAME>/terrain/`. It stores the original file, elevation, and four static feature maps: relative elevation, slope magnitude, `slope_x`, and `slope_y`.

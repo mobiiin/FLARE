@@ -9,7 +9,7 @@
 #SBATCH --gpus=a100:1
 #SBATCH --constraint=gpu_a100_80gb
 #SBATCH --time=24:00:00
-#SBATCH --chdir=/home/mhabibp/fire_forecasting
+#SBATCH --chdir=/home/mhabibp/FLARE
 #SBATCH --output=artifacts/logs/slurm/cawfe_no_fire_eval_%j.out
 #SBATCH --error=artifacts/logs/slurm/cawfe_no_fire_eval_%j.err
 
@@ -26,7 +26,7 @@ DEVICE="$3"
 BATCH_SIZE="$4"
 NUM_WORKERS="$5"
 OVERWRITE="$6"
-REPO_ROOT="${REPO_ROOT:-/home/mhabibp/fire_forecasting}"
+REPO_ROOT="${REPO_ROOT:-/home/mhabibp/FLARE}"
 CONDA_ENV="${CONDA_ENV:-fire_forecasting}"
 CONDA_ROOT="${CONDA_ROOT:-/home/mhabibp/anaconda3}"
 

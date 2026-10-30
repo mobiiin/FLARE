@@ -360,6 +360,13 @@ if [[ "$MAKE_QUICKLOOKS" == "1" ]]; then
     run_cmd python scripts/visualize_processed_samples.py --config "$TARGET_CONFIG" --pattern "$PATTERN" --split train --mode save --output_dir artifacts/data_debug/processed_samples
 fi
 
+if [[ "$DRY_RUN" == "1" ]]; then
+    write_status "dry_run"
+    trap - ERR
+    echo "Dry run completed; no dataset files were built."
+    exit 0
+fi
+
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 write_status "success"
 trap - ERR

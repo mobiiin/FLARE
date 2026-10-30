@@ -9,7 +9,7 @@
 #SBATCH --gpus=a100:1
 #SBATCH --constraint=gpu_a100_80gb
 #SBATCH --time=72:00:00
-#SBATCH --chdir=/home/mhabibp/fire_forecasting
+#SBATCH --chdir=/home/mhabibp/FLARE
 #SBATCH --output=artifacts/logs/slurm/flare_terrain_%j.out
 #SBATCH --error=artifacts/logs/slurm/flare_terrain_%j.err
 set -euo pipefail
@@ -18,7 +18,7 @@ VARIANT="$1"
 SEED="$2"
 RECOVER_FLAG="${3:-}"
 if [[ -n "$RECOVER_FLAG" && "$RECOVER_FLAG" != --recover ]]; then echo "Third argument must be --recover" >&2; exit 2; fi
-cd /home/mhabibp/fire_forecasting
+cd /home/mhabibp/FLARE
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 conda activate fire_forecasting
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
